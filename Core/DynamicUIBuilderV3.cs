@@ -17,6 +17,7 @@ using DynamicUI.Validation;
 using DynamicUI.Conversion;
 using DynamicUI.Plugins.Advanced;
 using DynamicUI.Animation;
+using DynamicUI.Logging.Targets;
 
 namespace DynamicUI.V3
 {

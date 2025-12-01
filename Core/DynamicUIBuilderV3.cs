@@ -435,9 +435,9 @@ namespace DynamicUI.V3
         {
             var stats = GetStatistics();
             
-            Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
+            Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
             Console.WriteLine("║          DynamicUI v3.0 - System Report                  ║");
-            Console.WriteLine("╚════════════════════════════════════════════════════════════╝");
+            Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
             Console.WriteLine();
             Console.WriteLine("📊 Build Statistics:");
             Console.WriteLine($"   Errors:   {stats.ErrorCount}");
@@ -460,7 +460,7 @@ namespace DynamicUI.V3
             
             Console.WriteLine();
             Console.WriteLine("✅ System Status: Operational");
-            Console.WriteLine("════════════════════════════════════════════════════════════");
+            Console.WriteLine("══════════════════════════════════════════════════════════");
         }
     }
 
@@ -486,14 +486,6 @@ namespace DynamicUI.V3
     {
         public ValidationException(string message) : base(message) { }
         public ValidationException(string message, Exception innerException) : base(message, innerException) { }
-    }
-
-    /// <summary>
-    /// Interfaz para setters asincrónicos
-    /// </summary>
-    public interface IAsyncPropertySetter : IPropertySetter
-    {
-        Task<bool> ApplyAsync(Control control, string propertyName, string value, CancellationToken ct);
     }
 
     /// <summary>
@@ -544,126 +536,3 @@ namespace DynamicUI.V3
         }
     }
 }
-
-// ============================================================================
-// EJEMPLO DE USO COMPLETO
-// ============================================================================
-/*
-using System;
-using System.Threading.Tasks;
-using Avalonia.Controls;
-using DynamicUI.V3;
-using DynamicUI.Logging;
-using DynamicUI.Controls.Custom;
-using DynamicUI.Plugins;
-
-public class CompleteUsageExample
-{
-    public static async Task Main()
-    {
-        // ═══════════════════════════════════════════════════════════════
-        // 1. CONFIGURAR LOGGER
-        // ═══════════════════════════════════════════════════════════════
-        var logger = new UILogger();
-        logger.AddTarget(new ConsoleLogTarget(useColors: true));
-        logger.AddTarget(new FileLogTarget("dynamicui.log", appendTimestamp: true));
-        var memoryTarget = new MemoryLogTarget(1000);
-        logger.AddTarget(memoryTarget);
-        logger.SetMinLevel(LogLevel.Debug);
-
-        // ═══════════════════════════════════════════════════════════════
-        // 2. CREAR BUILDER V3.0
-        // ═══════════════════════════════════════════════════════════════
-        var builder = new DynamicUIBuilderV3(logger)
-        {
-            DataContextResolver = ResolveMiDataContext,
-            StopOnError = false,
-            ValidateProperties = true,
-            EnableAnimations = true
-        };
-
-        // ═══════════════════════════════════════════════════════════════
-        // 3. CARGAR PLUGINS
-        // ═══════════════════════════════════════════════════════════════
-        builder.PluginManager.LoadPlugin(new AutoFitTextBlockPlugin());
-        builder.PluginManager.LoadPlugin(new SecurityValidationPlugin());
-        builder.PluginManager.LoadPlugin(new AdvancedConvertersPlugin());
-
-        // ═══════════════════════════════════════════════════════════════
-        // 4. CONSTRUIR UI DESDE MÚLTIPLES FORMATOS
-        // ═══════════════════════════════════════════════════════════════
-        var canvas = new Canvas();
-        
-        try
-        {
-            // Soporta TXT, JSON, XML, YAML (auto-detección)
-            await builder.BuildFromFileAsync(canvas, "interface.txt");
-            await builder.BuildFromFileAsync(canvas, "controls.json");
-            await builder.BuildFromFileAsync(canvas, "layout.xml");
-            await builder.BuildFromFileAsync(canvas, "config.yaml");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // 5. VER ESTADÍSTICAS
-        // ═══════════════════════════════════════════════════════════════
-        var stats = builder.GetStatistics();
-        
-        Console.WriteLine($"\n╔════════════ ESTADÍSTICAS ════════════╗");
-        Console.WriteLine($"║ Errores:       {stats.ErrorCount,5}               ║");
-        Console.WriteLine($"║ Advertencias:  {stats.WarningCount,5}               ║");
-        Console.WriteLine($"║ Plugins:       {stats.LoadedPlugins.Count,5}               ║");
-        Console.WriteLine($"║ Total logs:    {stats.TotalLogs,5}               ║");
-        Console.WriteLine($"╚══════════════════════════════════════╝\n");
-
-        // O usar el reporte completo
-        builder.PrintSystemReport();
-
-        // ═══════════════════════════════════════════════════════════════
-        // 6. EXPORTAR LOGS DE ERRORES
-        // ═══════════════════════════════════════════════════════════════
-        if (stats.ErrorCount > 0)
-        {
-            Console.WriteLine("❌ Se encontraron errores:");
-            var errors = memoryTarget.GetEntriesByLevel(LogLevel.Error);
-            foreach (var error in errors)
-            {
-                Console.WriteLine($"   - {error.Message}");
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // 7. LIMPIAR (OPCIONAL)
-        // ═══════════════════════════════════════════════════════════════
-        builder.PluginManager.UnloadAllPlugins();
-        
-        Console.WriteLine("\n✅ Proceso completado");
-    }
-
-    private static object ResolveMiDataContext(string name)
-    {
-        return name switch
-        {
-            "MainViewModel" => new MainViewModel(),
-            "UserData" => new UserDataModel(),
-            _ => null
-        };
-    }
-}
-
-// Modelos de ejemplo
-public class MainViewModel
-{
-    public string Title { get; set; } = "DynamicUI v3.0";
-    public int Counter { get; set; } = 0;
-}
-
-public class UserDataModel
-{
-    public string Name { get; set; } = "Usuario";
-    public int Age { get; set; } = 30;
-}
-*/

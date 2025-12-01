@@ -7,6 +7,7 @@ using DynamicUI.Setters;
 using DynamicUI.Validation;
 using DynamicUI.Conversion;
 using DynamicUI.Logging;
+using DynamicUI.V3;
 
 namespace DynamicUI.Plugins
 {
@@ -15,7 +16,7 @@ namespace DynamicUI.Plugins
     /// </summary>
     public class PluginContext
     {
-        public DynamicUIBuilder Builder { get; set; }
+        public DynamicUIBuilderV3 Builder { get; set; }
         public IUILogger Logger { get; set; }
         
         /// <summary>

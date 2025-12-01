@@ -16,7 +16,10 @@ namespace DynamicUI.Conversion
 
         public object Convert(string value, Type targetType)
         {
-            return value.ToLowerInvariant() switch
+            var lowerValue = value.ToLowerInvariant();
+
+            // Primero intentar nombres conocidos
+            var namedWeight = lowerValue switch
             {
                 "thin" => FontWeight.Thin,
                 "extralight" => FontWeight.ExtraLight,
@@ -32,10 +35,31 @@ namespace DynamicUI.Conversion
                 "ultrabold" => FontWeight.ExtraBold,
                 "black" => FontWeight.Black,
                 "heavy" => FontWeight.Black,
-                _ => int.TryParse(value, out var weight) 
-                    ? FontWeight.FromOpenTypeWeight(weight) 
-                    : FontWeight.Normal
+                _ => (FontWeight?)null
             };
+
+            if (namedWeight.HasValue)
+                return namedWeight.Value;
+
+            // Si es un número, mapear al FontWeight más cercano
+            if (int.TryParse(value, out var weight))
+            {
+                return weight switch
+                {
+                    <= 100 => FontWeight.Thin,           // 100
+                    <= 200 => FontWeight.ExtraLight,     // 200
+                    <= 300 => FontWeight.Light,          // 300
+                    <= 400 => FontWeight.Normal,         // 400
+                    <= 500 => FontWeight.Medium,         // 500
+                    <= 600 => FontWeight.SemiBold,       // 600
+                    <= 700 => FontWeight.Bold,           // 700
+                    <= 800 => FontWeight.ExtraBold,      // 800
+                    _ => FontWeight.Black                // 900+
+                };
+            }
+
+            // Valor por defecto
+            return FontWeight.Normal;
         }
     }
 }

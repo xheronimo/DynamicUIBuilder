@@ -69,4 +69,3 @@ Button Text="Animate me"; X=10; Y=50; Animate:Opacity=0,1000
 TextBox Text="SELECT * FROM users"; X=10; Y=100
 # El SecurityValidationPlugin advertirá sobre SQL
 */
-*/

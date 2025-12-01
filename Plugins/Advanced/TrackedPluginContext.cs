@@ -6,6 +6,7 @@ using DynamicUI.Setters;
 using DynamicUI.Validation;
 using DynamicUI.Conversion;
 using DynamicUI.Logging;
+using DynamicUI.V3;
 
 namespace DynamicUI.Plugins.Advanced
 {
@@ -16,7 +17,7 @@ namespace DynamicUI.Plugins.Advanced
     {
         private readonly PluginRegistration _registration;
 
-        public TrackedPluginContext(DynamicUIBuilder builder, IUILogger logger, PluginRegistration registration)
+        public TrackedPluginContext(DynamicUIBuilderV3 builder, IUILogger logger, PluginRegistration registration)
         {
             Builder = builder;
             Logger = logger;

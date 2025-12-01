@@ -15,13 +15,15 @@ namespace DynamicUI.Parsing
     {
         public static IEnumerable<ControlDescriptor> ParseFile(string rutaArchivo, Func<string, string> groupNormalizer = null)
         {
-            if (!File.Exists(rutaArchivo)) throw new FileNotFoundException(rutaArchivo);
+            if (!File.Exists(rutaArchivo))
+                throw new FileNotFoundException(rutaArchivo);
 
+            var results = new List<ControlDescriptor>();
             string currentControlType = null;
             string currentGroup = null;
             var defaults = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
             int lineno = 0;
+
             foreach (var raw in File.ReadLines(rutaArchivo))
             {
                 lineno++;
@@ -34,7 +36,8 @@ namespace DynamicUI.Parsing
                     if (linea.StartsWith("Grupo=", StringComparison.OrdinalIgnoreCase))
                     {
                         currentGroup = linea.Substring(6).Trim().Trim('\"');
-                        if (groupNormalizer != null) currentGroup = groupNormalizer(currentGroup);
+                        if (groupNormalizer != null)
+                            currentGroup = groupNormalizer(currentGroup);
                         continue;
                     }
 
@@ -50,7 +53,8 @@ namespace DynamicUI.Parsing
                     if (currentControlType != null && linea.Contains("=") && !linea.Contains(";"))
                     {
                         var pe = PropertyParser.ParsearPropiedad(linea);
-                        if (pe.Value != null) defaults[currentControlType][pe.Name] = pe.Value;
+                        if (pe.Value != null)
+                            defaults[currentControlType][pe.Name] = pe.Value;
                         continue;
                     }
 
@@ -60,17 +64,17 @@ namespace DynamicUI.Parsing
 
                     string tipo = currentControlType;
                     var props = new List<PropertyEntry>();
-
                     var primer = fragmentos[0];
+
                     if (!primer.Contains("="))
                     {
                         tipo = primer;
-                        for (int i = 1; i < fragmentos.Count; i++) 
+                        for (int i = 1; i < fragmentos.Count; i++)
                             props.Add(PropertyParser.ParsearPropiedad(fragmentos[i]));
                     }
                     else
                     {
-                        foreach (var f in fragmentos) 
+                        foreach (var f in fragmentos)
                             props.Add(PropertyParser.ParsearPropiedad(f));
                     }
 
@@ -78,7 +82,8 @@ namespace DynamicUI.Parsing
                     if (!string.IsNullOrEmpty(tipo) && defaults.TryGetValue(tipo, out var defs))
                     {
                         var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var p in props) present.Add(p.Name);
+                        foreach (var p in props)
+                            present.Add(p.Name);
 
                         foreach (var kv in defs)
                         {
@@ -87,13 +92,16 @@ namespace DynamicUI.Parsing
                         }
                     }
 
-                    yield return new ControlDescriptor(tipo, props, currentGroup);
+                    results.Add(new ControlDescriptor(tipo, props, currentGroup));
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error parsing line {lineno}: {ex.Message}");
                 }
             }
+
+            return results;
         }
     }
+
 }

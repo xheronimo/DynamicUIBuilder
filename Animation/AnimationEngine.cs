@@ -168,7 +168,7 @@ namespace DynamicUI.Animation
             // Configurar iteraciones
             if (descriptor.RepeatCount > 1)
             {
-                animation.IterationCount = new IterationCount(descriptor.RepeatCount);
+                animation.IterationCount = new IterationCount((ulong)descriptor.RepeatCount);
             }
 
             // Configurar dirección

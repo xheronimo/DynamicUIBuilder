@@ -5,6 +5,9 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Reactive;
+
+
 
 namespace DynamicUI.Controls.Custom
 {
@@ -76,12 +79,23 @@ namespace DynamicUI.Controls.Custom
         public AutoFitTextBlock()
         {
             // Suscribirse a cambios de propiedades
-            this.GetObservable(TextProperty).Subscribe(_ => OnContentChanged());
-            this.GetObservable(BoundsProperty).Subscribe(_ => OnContentChanged());
-            this.GetObservable(MinFontSizeProperty).Subscribe(_ => OnContentChanged());
-            this.GetObservable(MaxFontSizeProperty).Subscribe(_ => OnContentChanged());
-            this.GetObservable(AutoFitEnabledProperty).Subscribe(_ => OnContentChanged());
-            this.GetObservable(ShowDebugInfoProperty).Subscribe(_ => UpdateDebugVisualization());
+            this.GetObservable(TextProperty)
+                .Subscribe(new AnonymousObserver<string>(_ => OnContentChanged()));
+
+            this.GetObservable(BoundsProperty)
+                .Subscribe(new AnonymousObserver<Rect>(_ => OnContentChanged()));
+
+            this.GetObservable(MinFontSizeProperty)
+                .Subscribe(new AnonymousObserver<double>(_ => OnContentChanged()));
+
+            this.GetObservable(MaxFontSizeProperty)
+                .Subscribe(new AnonymousObserver<double>(_ => OnContentChanged()));
+
+            this.GetObservable(AutoFitEnabledProperty)
+                .Subscribe(new AnonymousObserver<bool>(_ => OnContentChanged()));
+
+            this.GetObservable(ShowDebugInfoProperty)
+                .Subscribe(new AnonymousObserver<bool>(_ => UpdateDebugVisualization()));
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

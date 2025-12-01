@@ -1,10 +1,11 @@
 // ============================================================================
 // ARCHIVO 3: Plugins/Advanced/AdvancedPluginManager.cs
 // ============================================================================
+using DynamicUI.Logging;
+using DynamicUI.V3;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DynamicUI.Logging;
 
 namespace DynamicUI.Plugins.Advanced
 {
@@ -15,11 +16,11 @@ namespace DynamicUI.Plugins.Advanced
     {
         private readonly Dictionary<string, (Plugins.IUIPlugin plugin, PluginRegistration registration)> _loadedPlugins = new();
         private readonly IUILogger _logger;
-        private readonly DynamicUIBuilder _builder;
+        private readonly DynamicUIBuilderV3 _builder;
 
         public IReadOnlyDictionary<string, (Plugins.IUIPlugin plugin, PluginRegistration registration)> LoadedPlugins => _loadedPlugins;
 
-        public AdvancedPluginManager(DynamicUIBuilder builder, IUILogger logger)
+        public AdvancedPluginManager(DynamicUIBuilderV3 builder, IUILogger logger)
         {
             _builder = builder;
             _logger = logger;

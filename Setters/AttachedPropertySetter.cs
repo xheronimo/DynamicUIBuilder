@@ -1,38 +1,37 @@
-// ============================================================================
-// ARCHIVO: Setters/AttachedPropertySetter.cs (MEJORADO)
-// ============================================================================
 using System;
 using Avalonia.Controls;
 
 namespace DynamicUI.Setters
 {
-    /// <summary>
-    /// Setter que maneja propiedades adjuntas de múltiples contenedores
-    /// </summary>
     public class AttachedPropertySetter : IPropertySetter
     {
         public bool CanHandle(Control control, string propertyName)
         {
-            // Canvas
-            if (propertyName.Equals("X", StringComparison.OrdinalIgnoreCase) || 
+            // Propiedades directas sin punto
+            if (propertyName.Equals("X", StringComparison.OrdinalIgnoreCase) ||
                 propertyName.Equals("Y", StringComparison.OrdinalIgnoreCase) ||
-                propertyName.Equals("ZIndex", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            // Grid
-            if (propertyName.Equals("Row", StringComparison.OrdinalIgnoreCase) ||
+                propertyName.Equals("ZIndex", StringComparison.OrdinalIgnoreCase) ||
+                propertyName.Equals("Row", StringComparison.OrdinalIgnoreCase) ||
                 propertyName.Equals("Column", StringComparison.OrdinalIgnoreCase) ||
                 propertyName.Equals("RowSpan", StringComparison.OrdinalIgnoreCase) ||
-                propertyName.Equals("ColumnSpan", StringComparison.OrdinalIgnoreCase))
+                propertyName.Equals("ColumnSpan", StringComparison.OrdinalIgnoreCase) ||
+                propertyName.Equals("Dock", StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
 
-            // DockPanel
-            if (propertyName.Equals("Dock", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            // Sintaxis con punto: Container.Property
+            // Propiedades con sintaxis de punto
             if (propertyName.Contains('.'))
-                return true;
+            {
+                var parts = propertyName.Split('.', 2);
+                if (parts.Length == 2)
+                {
+                    var container = parts[0];
+                    return container.Equals("Grid", StringComparison.OrdinalIgnoreCase) ||
+                           container.Equals("Canvas", StringComparison.OrdinalIgnoreCase) ||
+                           container.Equals("DockPanel", StringComparison.OrdinalIgnoreCase);
+                }
+            }
 
             return false;
         }
@@ -72,7 +71,8 @@ namespace DynamicUI.Setters
                 {
                     if (int.TryParse(value, out var z))
                     {
-                        Canvas.SetZIndex(control, z);
+                        // ZIndex está en Panel, no en Canvas
+                        control.ZIndex = z;
                         return true;
                     }
                     error = "Valor ZIndex inválido";
@@ -213,7 +213,8 @@ namespace DynamicUI.Setters
                         }
                         if (int.TryParse(value, out var z) && prop.Equals("ZIndex", StringComparison.OrdinalIgnoreCase))
                         {
-                            Canvas.SetZIndex(control, z);
+                            // ZIndex está en Control directamente
+                            control.ZIndex = z;
                             return true;
                         }
                         error = $"Propiedad Canvas.{prop} no soportada o valor inválido";

@@ -83,4 +83,3 @@ Border Background=Red; Animate:Width=100->300,1500,0,ElasticEaseOut,3,true
 # Múltiples animaciones en el mismo control
 Image Source="logo.png"; Animate:Opacity=0->1,1000; Animate:Y=0->50,2000,500,SineEaseInOut
 */
-*/

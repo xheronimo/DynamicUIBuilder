@@ -1,0 +1,112 @@
+// ============================================================================
+// EJEMPLOS DE USO
+// ============================================================================
+
+/* 
+===============================================================================
+EJEMPLO 1: Uso en archivo de texto
+===============================================================================
+# AutoFitTextBlock sin debug
+AutoFitTextBlock Name="MiTexto1"; Text="Este texto se ajusta automáticamente"; X=10; Y=10; Width=300; Height=100; MinFontSize=10; MaxFontSize=48
+
+# AutoFitTextBlock con debug activado - Mostrará "[TituloApp] AutoFitTextBlock | Font: X | ..."
+AutoFitTextBlock Name="TituloApp"; Text="Texto con info de debug visible"; X=10; Y=120; Width=400; Height=80; MinFontSize=8; MaxFontSize=36; ShowDebugInfo=true
+
+# Con valores por defecto y nombre
+Control=AutoFitTextBlock
+MinFontSize=12
+MaxFontSize=40
+ShowDebugInfo=true
+
+AutoFitTextBlock Name="TextoDefault1"; Text="Usando defaults"; X=10; Y=210; Width=350; Height=90
+AutoFitTextBlock Name="TextoDefault2"; Text="Otro con defaults"; X=10; Y=310; Width=350; Height=90
+
+# Sin nombre (mostrará solo "AutoFitTextBlock")
+AutoFitTextBlock Text="Sin nombre asignado"; X=10; Y=410; Width=300; Height=80; Debug=true
+*/
+
+/* 
+===============================================================================
+EJEMPLO 2: Uso en JSON
+===============================================================================
+{
+  "controls": [
+    {
+      "type": "AutoFitTextBlock",
+      "properties": {
+        "Name": "MiTextoJSON",
+        "Text": "Auto-ajustable desde JSON",
+        "X": "10",
+        "Y": "10",
+        "Width": "300",
+        "Height": "100",
+        "MinFontSize": "10",
+        "MaxFontSize": "48",
+        "ShowDebugInfo": "true"
+      }
+    },
+    {
+      "type": "AutoFitTextBlock",
+      "properties": {
+        "Name": "TituloSeccion",
+        "Text": "Título de sección",
+        "X": "10",
+        "Y": "120",
+        "Width": "400",
+        "Height": "60",
+        "Debug": "true"
+      }
+    }
+  ]
+}
+*/
+
+/* 
+===============================================================================
+EJEMPLO 3: Uso programático con debug
+===============================================================================
+using System;
+using Avalonia.Controls;
+using DynamicUI.Controls.Custom;
+
+// Con nombre asignado
+var autoFit = new AutoFitTextBlock
+{
+    Name = "TextoPrincipal",  // ← El nombre aparecerá en el debug
+    Text = "Texto de prueba",
+    Width = 300,
+    Height = 100,
+    MinFontSize = 10,
+    MaxFontSize = 48,
+    ShowDebugInfo = true  // Mostrará: "[TextoPrincipal] AutoFitTextBlock | Font: X | ..."
+};
+
+// Sin nombre asignado
+var autoFit2 = new AutoFitTextBlock
+{
+    Text = "Sin nombre",
+    Width = 300,
+    Height = 100,
+    ShowDebugInfo = true  // Mostrará: "AutoFitTextBlock | Font: X | ..."
+};
+
+// Agregar a canvas
+canvas.Children.Add(autoFit);
+Canvas.SetLeft(autoFit, 10);
+Canvas.SetTop(autoFit, 10);
+
+// Obtener información de debug
+Console.WriteLine(autoFit.GetDebugInfo());
+
+// Salida ejemplo:
+// AutoFitTextBlock Debug Info:
+// - Name: "TextoPrincipal"
+// - Text: "Texto de prueba"
+// - Current FontSize: 32.50pt
+// - Min/Max FontSize: 10.00pt / 48.00pt
+// - Text Dimensions: 285.50 x 38.20
+// - Available Space: 300.00 x 100.00
+// - Control Bounds: 300.00 x 100.00
+// - AutoFit Enabled: True
+// - Padding: 0,0,0,0
+*/

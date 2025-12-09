@@ -56,12 +56,20 @@ namespace DynamicUI.Parsing.Advanced
             {
                 if (parser.CanParse(filePath))
                 {
-                    return parser.Parse(filePath);
+                    var descriptors = parser.Parse(filePath);
+
+                    foreach (var d in descriptors)
+                    {
+                        d.SourceFile = filePath;
+                    }
+
+                    return descriptors;
                 }
             }
 
             throw new NotSupportedException($"No hay parser disponible para el archivo: {filePath}");
         }
+
 
         /// <summary>
         /// Obtiene todos los parsers registrados

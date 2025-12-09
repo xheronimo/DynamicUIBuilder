@@ -1,37 +1,37 @@
 // ============================================================================
 // ARCHIVO: Core/DynamicUIBuilderV3.cs
 // ============================================================================
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using DynamicUI.Animation;
+using DynamicUI.Binding;
+using DynamicUI.Controls;
+using DynamicUI.Conversion;
+using DynamicUI.Logging;
+using DynamicUI.Logging.Targets;
+using DynamicUI.Parsing;
+using DynamicUI.Parsing.Advanced;
+using DynamicUI.Plugins.Advanced;
+using DynamicUI.Setters;
+using DynamicUI.Validation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
-using DynamicUI.Parsing;
-using DynamicUI.Parsing.Advanced;
-using DynamicUI.Controls;
-using DynamicUI.Setters;
-using DynamicUI.Binding;
-using DynamicUI.Logging;
-using DynamicUI.Validation;
-using DynamicUI.Conversion;
-using DynamicUI.Plugins.Advanced;
-using DynamicUI.Animation;
-using DynamicUI.Logging.Targets;
-
 
 namespace DynamicUI.V3
 {
     /// <summary>
     /// DynamicUIBuilder versión 3.0 - Integración completa de todos los sistemas
+    /// Soporta: TXT, JSON, XML, YAML
+    /// Auto-registro de controles
+    /// Carga recursiva de archivos
     /// </summary>
     public class DynamicUIBuilderV3
     {
         private readonly List<IPropertySetter> _setters = new();
         private readonly List<IPropertyValidator> _validators = new();
         private readonly List<IValueConverter> _converters = new();
-        
+
         private readonly IUILogger _logger;
         private readonly PropertyValidationEngine _validationEngine;
         private readonly TypeConversionEngine _conversionEngine;
@@ -73,6 +73,9 @@ namespace DynamicUI.V3
             ControlAutoRegistration.RegisterAllAvaloniaControls();
 
             // Registrar setters (orden importante: más específicos primero)
+            _setters.Add(new ClassesSetter());
+            _setters.Add(new GridDefinitionSetter());
+            _setters.Add(new ToolTipSetter());
             _setters.Add(new ImageSetter());
             _setters.Add(new AttachedPropertySetter());
             if (EnableAnimations)
@@ -80,6 +83,9 @@ namespace DynamicUI.V3
                 _setters.Add(new AnimationSetter(_animationEngine, _logger));
             }
             _setters.Add(new ImprovedDefaultPropertySetter(_conversionEngine, _logger));
+
+           
+
 
             _logger.LogInfo("DynamicUIBuilder v3.0 inicializado");
         }
@@ -91,7 +97,7 @@ namespace DynamicUI.V3
         {
             if (setter == null)
                 throw new ArgumentNullException(nameof(setter));
-            
+
             _setters.Insert(0, setter);
             _logger.LogDebug($"Setter registrado: {setter.GetType().Name}");
         }
@@ -144,33 +150,28 @@ namespace DynamicUI.V3
         }
 
         /// <summary>
-        /// Construye la UI desde un archivo (auto-detecta formato)
+        /// Construye la UI desde un archivo en cualquier contenedor
+        /// Soporta: Panel, ContentControl, ItemsControl, Decorator, Window
+        /// Auto-detecta formato: TXT, JSON, XML, YAML
         /// </summary>
-        public void BuildFromFile(Canvas canvas, string filePath)
+        public void BuildFromFile(Control container, string filePath)
         {
-            BuildFromFileAsync(canvas, filePath, CancellationToken.None).GetAwaiter().GetResult();
-        }
-
-        /// <summary>
-        /// Construye la UI desde un archivo de forma asíncrona
-        /// </summary>
-        public async Task BuildFromFileAsync(Canvas canvas, string filePath, CancellationToken ct = default)
-        {
-            if (canvas == null) 
-                throw new ArgumentNullException(nameof(canvas));
+            if (container == null)
+                throw new ArgumentNullException(nameof(container));
 
             _logger.LogInfo($"=== Iniciando construcción de UI ===");
             _logger.LogInfo($"Archivo: {filePath}");
+            _logger.LogInfo($"Contenedor: {container.GetType().Name}");
             var startTime = DateTime.UtcNow;
 
             try
             {
-                // Parsear archivo (auto-detecta formato: TXT, JSON, XML, YAML)
+                // Parsear archivo (auto-detecta formato)
                 IEnumerable<ControlDescriptor> descriptors;
-                
+
                 try
                 {
-                    descriptors = await Task.Run(() => _multiFormatParser.ParseFile(filePath), ct);
+                    descriptors = _multiFormatParser.ParseFile(filePath);
                 }
                 catch (Exception ex)
                 {
@@ -186,22 +187,27 @@ namespace DynamicUI.V3
 
                 foreach (var desc in descriptorList)
                 {
-                    ct.ThrowIfCancellationRequested();
-
                     try
                     {
-                        var control = await CreateControlAsync(desc, ct);
+                        var control = CreateControl(desc);
                         if (control != null)
                         {
-                            canvas.Children.Add(control);
-                            successCount++;
-                            _logger.LogDebug($"✓ Control '{desc.TypeName}' creado exitosamente");
+                            if (AddControlToContainer(container, control))
+                            {
+                                successCount++;
+                                _logger.LogDebug($"✓ Control '{desc.TypeName}' creado y agregado");
+                            }
+                            else
+                            {
+                                errorCount++;
+                                _logger.LogError($"✗ No se pudo agregar '{desc.TypeName}' al contenedor");
+                            }
                         }
                         else
                         {
                             errorCount++;
                             _logger.LogError($"✗ Control '{desc.TypeName}' falló en la creación");
-                            
+
                             if (StopOnError)
                             {
                                 _logger.LogError("Deteniendo construcción debido a StopOnError=true");
@@ -213,7 +219,7 @@ namespace DynamicUI.V3
                     {
                         errorCount++;
                         _logger.LogError($"✗ Error creando control '{desc.TypeName}': {ex.Message}", ex);
-                        
+
                         if (StopOnError)
                         {
                             _logger.LogError("Deteniendo construcción debido a StopOnError=true");
@@ -236,8 +242,134 @@ namespace DynamicUI.V3
             }
         }
 
-        private async Task<Control> CreateControlAsync(ControlDescriptor desc, CancellationToken ct)
+        /// <summary>
+        /// Sobrecarga para mantener compatibilidad con Canvas
+        /// </summary>
+        public void BuildFromFile(Canvas canvas, string filePath)
         {
+            BuildFromFile((Control)canvas, filePath);
+        }
+
+        /// <summary>
+        /// Agrega un control hijo a un contenedor, detectando automáticamente el tipo
+        /// </summary>
+        private bool AddControlToContainer(Control container, Control child)
+        {
+            try
+            {
+                // Panel (Canvas, StackPanel, Grid, DockPanel, WrapPanel, etc.)
+                if (container is Panel panel)
+                {
+                    panel.Children.Add(child);
+                    _logger.LogDebug($"  → Agregado a Panel.Children");
+                    return true;
+                }
+
+                // ContentControl (Button, Border, ScrollViewer, TabItem, Window, etc.)
+                if (container is ContentControl contentControl)
+                {
+                    if (contentControl.Content != null)
+                    {
+                        _logger.LogWarning($"  ⚠ ContentControl ya tiene contenido, creando StackPanel contenedor");
+
+                        var existingContent = contentControl.Content;
+                        var stackPanel = new StackPanel();
+
+                        if (existingContent is Control existingControl)
+                        {
+                            stackPanel.Children.Add(existingControl);
+                        }
+
+                        stackPanel.Children.Add(child);
+                        contentControl.Content = stackPanel;
+                    }
+                    else
+                    {
+                        contentControl.Content = child;
+                    }
+
+                    _logger.LogDebug($"  → Agregado a ContentControl.Content");
+                    return true;
+                }
+
+                // ItemsControl (ListBox, ComboBox, TabControl, etc.)
+                if (container is ItemsControl itemsControl)
+                {
+                    itemsControl.Items.Add(child);
+                    _logger.LogDebug($"  → Agregado a ItemsControl.Items");
+                    return true;
+                }
+
+                // Decorator (Border, Viewbox, etc.)
+                if (container is Decorator decorator)
+                {
+                    if (decorator.Child != null)
+                    {
+                        _logger.LogWarning($"  ⚠ Decorator ya tiene hijo, creando StackPanel contenedor");
+
+                        var existingChild = decorator.Child;
+                        var stackPanel = new StackPanel();
+
+                        if (existingChild != null)
+                        {
+                            stackPanel.Children.Add(existingChild);
+                        }
+
+                        stackPanel.Children.Add(child);
+                        decorator.Child = stackPanel;
+                    }
+                    else
+                    {
+                        decorator.Child = child;
+                    }
+
+                    _logger.LogDebug($"  → Agregado a Decorator.Child");
+                    return true;
+                }
+
+                // Window (caso especial)
+                if (container is Window window)
+                {
+                    if (window.Content != null)
+                    {
+                        _logger.LogWarning($"  ⚠ Window ya tiene contenido, creando StackPanel contenedor");
+
+                        var existingContent = window.Content;
+                        var stackPanel = new StackPanel();
+
+                        if (existingContent is Control existingControl)
+                        {
+                            stackPanel.Children.Add(existingControl);
+                        }
+
+                        stackPanel.Children.Add(child);
+                        window.Content = stackPanel;
+                    }
+                    else
+                    {
+                        window.Content = child;
+                    }
+
+                    _logger.LogDebug($"  → Agregado a Window.Content");
+                    return true;
+                }
+
+                _logger.LogError($"  ✗ Tipo de contenedor no soportado: {container.GetType().Name}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"  ✗ Error agregando control: {ex.Message}");
+                return false;
+            }
+        }
+
+        private Control CreateControl(ControlDescriptor desc)
+        {
+            if (!string.IsNullOrEmpty(desc.SourceFile))
+            {
+                _logger.LogInfo($"Procesando fichero: {desc.SourceFile}");
+            }
             // 1. Crear control
             var control = ControlFactory.Create(desc.TypeName);
             if (control == null)
@@ -252,7 +384,7 @@ namespace DynamicUI.V3
             {
                 try
                 {
-                    groupContext = await Task.Run(() => DataContextResolver(desc.GroupName), ct);
+                    groupContext = DataContextResolver(desc.GroupName);
                     _logger.LogDebug($"DataContext resuelto para grupo '{desc.GroupName}'");
                 }
                 catch (Exception ex)
@@ -266,11 +398,9 @@ namespace DynamicUI.V3
             // 3. Aplicar propiedades
             foreach (var prop in desc.Properties)
             {
-                ct.ThrowIfCancellationRequested();
-
-                if (string.IsNullOrWhiteSpace(prop.Name)) 
+                if (string.IsNullOrWhiteSpace(prop.Name))
                     continue;
-                
+
                 if (prop.Value == null)
                 {
                     _logger.LogWarning($"Propiedad '{prop.Name}' no tiene valor");
@@ -312,20 +442,20 @@ namespace DynamicUI.V3
                 if (ValidateProperties)
                 {
                     var validationResult = _validationEngine.Validate(control, prop.Name, prop.Value);
-                    
+
                     if (!validationResult.IsValid)
                     {
                         foreach (var error in validationResult.Errors)
                         {
                             _logger.LogError($"Validación fallida [{desc.TypeName}.{prop.Name}]: {error}");
                         }
-                        
+
                         if (StopOnError)
                         {
                             throw new ValidationException(
                                 $"Validación fallida en {desc.TypeName}.{prop.Name}: {string.Join(", ", validationResult.Errors)}");
                         }
-                        
+
                         continue;
                     }
 
@@ -336,8 +466,8 @@ namespace DynamicUI.V3
                 }
 
                 // Aplicar propiedad
-                bool applied = await ApplyPropertyAsync(control, prop.Name, prop.Value, ct);
-                
+                bool applied = ApplyProperty(control, prop.Name, prop.Value);
+
                 if (!applied)
                 {
                     _logger.LogWarning($"No se pudo aplicar propiedad '{prop.Name}' en '{desc.TypeName}'");
@@ -350,160 +480,184 @@ namespace DynamicUI.V3
             // 5. Procesar controles hijos
             if (desc.Children != null && desc.Children.Count > 0)
             {
-                await ProcessChildrenAsync(control, desc.Children, ct);
+                ProcessChildren(control, desc.Children);
             }
 
             return control;
         }
 
         /// <summary>
-        /// Procesa y agrega controles hijos a un contenedor
+        /// Procesa y agrega controles hijos a cualquier tipo de contenedor
         /// </summary>
-        private async Task ProcessChildrenAsync(Control parent, List<ControlDescriptor> children, CancellationToken ct)
+        private void ProcessChildren(Control parent, List<ControlDescriptor> children)
         {
             _logger.LogDebug($"Procesando {children.Count} controles hijos para {parent.GetType().Name}");
 
-            // Determinar el contenedor de hijos según el tipo de control
-            object childrenContainer = null;
+            if (children == null || children.Count == 0)
+                return;
 
-            // Panel (StackPanel, Grid, Canvas, etc.)
+            // Panel (Canvas, StackPanel, Grid, DockPanel, WrapPanel, etc.)
             if (parent is Panel panel)
             {
-                childrenContainer = panel.Children;
-            }
-            // ContentControl (Button, TabItem, etc.)
-            else if (parent is ContentControl contentControl)
-            {
-                // Si solo hay un hijo, asignarlo directamente a Content
-                if (children.Count == 1)
+                foreach (var childDesc in children)
                 {
-                    var child = await CreateControlAsync(children[0], ct);
-                    if (child != null)
+                    try
                     {
-                        contentControl.Content = child;
-                        _logger.LogDebug($"Control hijo asignado a Content de {parent.GetType().Name}");
+                        var child = CreateControl(childDesc);
+                        if (child != null)
+                        {
+                            panel.Children.Add(child);
+                            _logger.LogDebug($"  ✓ Hijo '{childDesc.TypeName}' agregado a Panel");
+                        }
                     }
-                    return;
-                }
-                // Si hay múltiples hijos, crear un StackPanel contenedor
-                else
-                {
-                    var container = new StackPanel();
-                    contentControl.Content = container;
-                    childrenContainer = container.Children;
-                    _logger.LogDebug($"StackPanel contenedor creado para múltiples hijos en {parent.GetType().Name}");
-                }
-            }
-            // ItemsControl (ListBox, ComboBox, TabControl, etc.)
-            else if (parent is ItemsControl itemsControl)
-            {
-                childrenContainer = itemsControl.Items;
-            }
-            // Decorator (Border, Viewbox, etc.)
-            else if (parent is Decorator decorator)
-            {
-                if (children.Count == 1)
-                {
-                    var child = await CreateControlAsync(children[0], ct);
-                    if (child != null)
+                    catch (Exception ex)
                     {
-                        decorator.Child = child;
-                        _logger.LogDebug($"Control hijo asignado a Child de {parent.GetType().Name}");
+                        _logger.LogError($"  ✗ Error creando hijo '{childDesc.TypeName}': {ex.Message}", ex);
+                        if (StopOnError) throw;
                     }
-                    return;
                 }
-                else
-                {
-                    var container = new StackPanel();
-                    decorator.Child = container;
-                    childrenContainer = container.Children;
-                    _logger.LogDebug($"StackPanel contenedor creado para múltiples hijos en {parent.GetType().Name}");
-                }
-            }
-            else
-            {
-                _logger.LogWarning($"El control {parent.GetType().Name} no soporta controles hijos");
                 return;
             }
 
-            // Crear y agregar cada control hijo
-            if (childrenContainer is Avalonia.Controls.Controls avaloniaControls)
+            // ContentControl (Button, TabItem, GroupBox, ScrollViewer, etc.)
+            if (parent is ContentControl contentControl)
             {
-                foreach (var childDesc in children)
+                if (children.Count == 1)
                 {
-                    ct.ThrowIfCancellationRequested();
-
                     try
                     {
-                        var child = await CreateControlAsync(childDesc, ct);
+                        var child = CreateControl(children[0]);
                         if (child != null)
                         {
-                            avaloniaControls.Add(child);
-                            _logger.LogDebug($"✓ Control hijo '{childDesc.TypeName}' agregado");
+                            contentControl.Content = child;
+                            _logger.LogDebug($"  ✓ Hijo '{children[0].TypeName}' asignado a Content");
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError($"Error creando control hijo '{childDesc.TypeName}': {ex.Message}", ex);
-                        
-                        if (StopOnError)
-                            throw;
+                        _logger.LogError($"  ✗ Error creando hijo: {ex.Message}", ex);
+                        if (StopOnError) throw;
                     }
                 }
+                else
+                {
+                    var container = new StackPanel();
+
+                    foreach (var childDesc in children)
+                    {
+                        try
+                        {
+                            var child = CreateControl(childDesc);
+                            if (child != null)
+                            {
+                                container.Children.Add(child);
+                                _logger.LogDebug($"  ✓ Hijo '{childDesc.TypeName}' agregado a contenedor");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError($"  ✗ Error creando hijo '{childDesc.TypeName}': {ex.Message}", ex);
+                            if (StopOnError) throw;
+                        }
+                    }
+
+                    contentControl.Content = container;
+                    _logger.LogDebug($"  ✓ StackPanel contenedor creado con {container.Children.Count} hijos");
+                }
+                return;
             }
-            else if (childrenContainer is Avalonia.Controls.ItemCollection items)
+
+            // ItemsControl (ListBox, ComboBox, TabControl, etc.)
+            if (parent is ItemsControl itemsControl)
             {
                 foreach (var childDesc in children)
                 {
-                    ct.ThrowIfCancellationRequested();
-
                     try
                     {
-                        var child = await CreateControlAsync(childDesc, ct);
+                        var child = CreateControl(childDesc);
                         if (child != null)
                         {
-                            items.Add(child);
-                            _logger.LogDebug($"✓ Control hijo '{childDesc.TypeName}' agregado a Items");
+                            itemsControl.Items.Add(child);
+                            _logger.LogDebug($"  ✓ Hijo '{childDesc.TypeName}' agregado a Items");
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError($"Error creando control hijo '{childDesc.TypeName}': {ex.Message}", ex);
-                        
-                        if (StopOnError)
-                            throw;
+                        _logger.LogError($"  ✗ Error creando hijo '{childDesc.TypeName}': {ex.Message}", ex);
+                        if (StopOnError) throw;
                     }
                 }
+                return;
             }
+
+            // Decorator (Border, Viewbox, etc.)
+            if (parent is Decorator decorator)
+            {
+                if (children.Count == 1)
+                {
+                    try
+                    {
+                        var child = CreateControl(children[0]);
+                        if (child != null)
+                        {
+                            decorator.Child = child;
+                            _logger.LogDebug($"  ✓ Hijo '{children[0].TypeName}' asignado a Child");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError($"  ✗ Error creando hijo: {ex.Message}", ex);
+                        if (StopOnError) throw;
+                    }
+                }
+                else
+                {
+                    var container = new StackPanel();
+
+                    foreach (var childDesc in children)
+                    {
+                        try
+                        {
+                            var child = CreateControl(childDesc);
+                            if (child != null)
+                            {
+                                container.Children.Add(child);
+                                _logger.LogDebug($"  ✓ Hijo '{childDesc.TypeName}' agregado a contenedor");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError($"  ✗ Error creando hijo '{childDesc.TypeName}': {ex.Message}", ex);
+                            if (StopOnError) throw;
+                        }
+                    }
+
+                    decorator.Child = container;
+                    _logger.LogDebug($"  ✓ StackPanel contenedor creado con {container.Children.Count} hijos");
+                }
+                return;
+            }
+
+            _logger.LogWarning($"  ⚠ El control {parent.GetType().Name} no soporta hijos");
         }
 
-        private async Task<bool> ApplyPropertyAsync(Control control, string propertyName, string value, CancellationToken ct)
+        private bool ApplyProperty(Control control, string propertyName, string value)
         {
             foreach (var setter in _setters)
             {
-                ct.ThrowIfCancellationRequested();
-
                 if (!setter.CanHandle(control, propertyName))
                     continue;
 
                 try
                 {
-                    // Si el setter soporta async, usarlo
-                    if (setter is IAsyncPropertySetter asyncSetter)
+                    if (setter.Apply(control, propertyName, value, out var error))
                     {
-                        return await asyncSetter.ApplyAsync(control, propertyName, value, ct);
+                        return true;
                     }
                     else
                     {
-                        if (setter.Apply(control, propertyName, value, out var error))
-                        {
-                            return true;
-                        }
-                        else
-                        {
-                            _logger.LogError($"Error aplicando {propertyName}: {error}");
-                            return false;
-                        }
+                        _logger.LogError($"Error aplicando {propertyName}: {error}");
+                        return false;
                     }
                 }
                 catch (Exception ex)
@@ -556,7 +710,7 @@ namespace DynamicUI.V3
         public void PrintSystemReport()
         {
             var stats = GetStatistics();
-            
+
             Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
             Console.WriteLine("║          DynamicUI v3.0 - System Report                  ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
@@ -573,13 +727,13 @@ namespace DynamicUI.V3
             Console.WriteLine($"   Converters: {stats.RegisteredConverters}");
             Console.WriteLine();
             Console.WriteLine($"🔌 Loaded Plugins: {stats.LoadedPlugins.Count}");
-            
+
             foreach (var plugin in stats.LoadedPlugins)
             {
                 Console.WriteLine($"   ├─ {plugin.Name} v{plugin.Version}");
                 Console.WriteLine($"   │  Controls: {plugin.ControlCount}, Setters: {plugin.SetterCount}");
             }
-            
+
             Console.WriteLine();
             Console.WriteLine("✅ System Status: Operational");
             Console.WriteLine("══════════════════════════════════════════════════════════");
@@ -630,13 +784,13 @@ namespace DynamicUI.V3
         {
             error = null;
             var prop = CachedReflection.GetProperty(control.GetType(), propertyName);
-            
+
             if (prop == null)
             {
                 error = "Propiedad no encontrada";
                 return false;
             }
-            
+
             if (!prop.CanWrite)
             {
                 error = "Propiedad de solo lectura";
@@ -645,15 +799,47 @@ namespace DynamicUI.V3
 
             try
             {
-                object converted = _converter.ConvertValue(value, prop.PropertyType);
+                object converted;
+
+                // Caso especial: object → asignar directamente el string
+                if (prop.PropertyType == typeof(object))
+                {
+                    converted = value;
+                }
+                // Caso especial: string → asignar directamente
+                else if (prop.PropertyType == typeof(string))
+                {
+                    converted = value;
+                }
+                // Caso especial: enum → parsear
+                else if (prop.PropertyType.IsEnum)
+                {
+                    converted = Enum.Parse(prop.PropertyType, value, ignoreCase: true);
+                }
+                else
+                {
+                    // Usar el motor de conversión para otros tipos (int, double, etc.)
+                    converted = _converter.ConvertValue(value, prop.PropertyType);
+                }
+
                 prop.SetValue(control, converted);
                 return true;
             }
+
             catch (Exception ex)
             {
-                error = ex.Message;
-                _logger.LogError($"Error convirtiendo '{value}' a {prop.PropertyType.Name}: {ex.Message}");
-                return false;
+                // Fallback: si falla la conversión, asignar directamente el string
+                try
+                {
+                    prop.SetValue(control, value);
+                    return true;
+                }
+                catch
+                {
+                    error = ex.Message;
+                    _logger.LogError($"Error convirtiendo '{value}' a {prop.PropertyType.Name}: {ex.Message}");
+                    return false;
+                }
             }
         }
     }

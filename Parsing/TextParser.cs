@@ -22,41 +22,43 @@ namespace DynamicUI.Parsing
         /// <returns>Lista de descriptores de controles</returns>
         public static IEnumerable<ControlDescriptor> ParseFile(string rutaArchivo, Func<string, string> groupNormalizer = null)
         {
-            if (!File.Exists(rutaArchivo)) 
+            if (!File.Exists(rutaArchivo))
                 throw new FileNotFoundException($"Archivo no encontrado: {rutaArchivo}");
-            
+
             var baseDirectory = Path.GetDirectoryName(rutaArchivo) ?? ".";
             var results = new List<ControlDescriptor>();
             string currentControlType = null;
             string currentGroup = null;
             var defaults = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
             int lineno = 0;
-            
+
+            // Pila para manejar jerarquía por indentación
+            var stack = new Stack<(int indent, ControlDescriptor desc)>();
+
             foreach (var raw in File.ReadLines(rutaArchivo))
             {
                 lineno++;
                 if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                // Contar indentación antes de hacer Trim
+                int indent = raw.TakeWhile(Char.IsWhiteSpace).Count();
                 var linea = raw.Trim();
-                
+
                 // Ignorar comentarios
                 if (linea.StartsWith("#")) continue;
-                
+
                 try
                 {
-                    // ═══════════════════════════════════════════════════════
-                    // COMANDO: Grupo=NombreGrupo
-                    // ═══════════════════════════════════════════════════════
+                    // Grupo=NombreGrupo
                     if (linea.StartsWith("Grupo=", StringComparison.OrdinalIgnoreCase))
                     {
                         currentGroup = linea.Substring(6).Trim().Trim('\"');
-                        if (groupNormalizer != null) 
+                        if (groupNormalizer != null)
                             currentGroup = groupNormalizer(currentGroup);
                         continue;
                     }
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // COMANDO: Control=TipoControl (define defaults)
-                    // ═══════════════════════════════════════════════════════
+
+                    // Control=TipoControl (define defaults)
                     if (linea.StartsWith("Control=", StringComparison.OrdinalIgnoreCase))
                     {
                         currentControlType = linea.Substring(8).Trim();
@@ -64,70 +66,61 @@ namespace DynamicUI.Parsing
                             defaults[currentControlType] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                         continue;
                     }
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // DEFAULTS: Líneas con = pero sin ; (dentro de Control=)
-                    // ═══════════════════════════════════════════════════════
+
+                    // Defaults dentro de Control=
                     if (currentControlType != null && linea.Contains("=") && !linea.Contains(";"))
                     {
                         var pe = PropertyParser.ParsearPropiedad(linea);
-                        if (pe.Value != null) 
+                        if (pe.Value != null)
                             defaults[currentControlType][pe.Name] = pe.Value;
                         continue;
                     }
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // LÍNEA DE CONTROL NORMAL
-                    // ═══════════════════════════════════════════════════════
+
+                    // Línea de control normal
                     var fragmentos = LineParser.ParsearLinea(linea);
                     if (fragmentos.Count == 0) continue;
-                    
+
                     string tipo = currentControlType;
                     var props = new List<PropertyEntry>();
                     var primer = fragmentos[0];
-                    
-                    // Si el primer fragmento no tiene '=', es el tipo de control
+
                     if (!primer.Contains("="))
                     {
                         tipo = primer;
-                        for (int i = 1; i < fragmentos.Count; i++) 
+                        for (int i = 1; i < fragmentos.Count; i++)
                             props.Add(PropertyParser.ParsearPropiedad(fragmentos[i]));
                     }
                     else
                     {
-                        // Todos los fragmentos son propiedades
-                        foreach (var f in fragmentos) 
+                        foreach (var f in fragmentos)
                             props.Add(PropertyParser.ParsearPropiedad(f));
                     }
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // CARGAR PROPIEDADES desde archivo externo
-                    // Palabras clave: PropertiesFile, LoadProps
-                    // ═══════════════════════════════════════════════════════
-                    var fileProps = props.Where(p => 
+
+                    // Cargar propiedades externas
+                    var fileProps = props.Where(p =>
                         p.Name.Equals("PropertiesFile", StringComparison.OrdinalIgnoreCase) ||
                         p.Name.Equals("LoadProps", StringComparison.OrdinalIgnoreCase) ||
                         p.Name.Equals("PropsFile", StringComparison.OrdinalIgnoreCase))
                         .ToList();
-                    
+
                     foreach (var fileProp in fileProps)
                     {
                         props.Remove(fileProp);
                         var externalFile = ResolveFilePath(fileProp.Value, baseDirectory);
-                        
+
                         if (File.Exists(externalFile))
                         {
                             var externalProps = LoadPropertiesFromFile(externalFile);
                             var existingNames = new HashSet<string>(
-                                props.Select(p => p.Name), 
+                                props.Select(p => p.Name),
                                 StringComparer.OrdinalIgnoreCase);
-                            
+
                             foreach (var extProp in externalProps)
                             {
                                 if (!existingNames.Contains(extProp.Name))
                                     props.Add(extProp);
                             }
-                            
+
                             Console.WriteLine($"  ✓ Propiedades cargadas desde: {Path.GetFileName(externalFile)}");
                         }
                         else
@@ -135,36 +128,32 @@ namespace DynamicUI.Parsing
                             Console.WriteLine($"  ⚠ Archivo de propiedades no encontrado: {externalFile}");
                         }
                     }
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // CARGAR CONTROLES HIJOS desde archivo externo
-                    // Palabras clave: Children, ChildrenFile, LoadChildren, Content (si termina en .txt)
-                    // ═══════════════════════════════════════════════════════
-                    var childrenProps = props.Where(p => 
+
+                    // Cargar hijos externos
+                    var childrenProps = props.Where(p =>
                         p.Name.Equals("Children", StringComparison.OrdinalIgnoreCase) ||
                         p.Name.Equals("ChildrenFile", StringComparison.OrdinalIgnoreCase) ||
                         p.Name.Equals("LoadChildren", StringComparison.OrdinalIgnoreCase) ||
-                        (p.Name.Equals("Content", StringComparison.OrdinalIgnoreCase) && 
+                        (p.Name.Equals("Content", StringComparison.OrdinalIgnoreCase) &&
                          p.Value != null && p.Value.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)))
                         .ToList();
-                    
+
                     List<ControlDescriptor> children = null;
-                    
+
                     foreach (var childProp in childrenProps)
                     {
                         props.Remove(childProp);
                         var childrenFile = ResolveFilePath(childProp.Value, baseDirectory);
-                        
+
                         if (File.Exists(childrenFile))
                         {
-                            // Cargar controles hijos recursivamente
                             var loadedChildren = ParseFile(childrenFile, groupNormalizer).ToList();
-                            
+
                             if (children == null)
                                 children = new List<ControlDescriptor>();
-                            
+
                             children.AddRange(loadedChildren);
-                            
+
                             Console.WriteLine($"  ✓ {loadedChildren.Count} controles hijos cargados desde: {Path.GetFileName(childrenFile)}");
                         }
                         else
@@ -172,41 +161,74 @@ namespace DynamicUI.Parsing
                             Console.WriteLine($"  ⚠ Archivo de controles hijos no encontrado: {childrenFile}");
                         }
                     }
-                    
-                    // ═══════════════════════════════════════════════════════
-                    // APLICAR DEFAULTS (sin sobreescribir propiedades existentes)
-                    // ═══════════════════════════════════════════════════════
+
+                    // Aplicar defaults
                     if (!string.IsNullOrEmpty(tipo) && defaults.TryGetValue(tipo, out var defs))
                     {
                         var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var p in props) 
+                        foreach (var p in props)
                             present.Add(p.Name);
-                            
+
                         foreach (var kv in defs)
                         {
                             if (!present.Contains(kv.Key))
                                 props.Insert(0, new PropertyEntry(kv.Key, kv.Value));
                         }
                     }
-                    
-                    // Crear descriptor con hijos si los hay
-                    var descriptor = new ControlDescriptor(tipo, props, currentGroup);
+
+                    // Crear descriptor
+                    var descriptor = new ControlDescriptor(tipo, props, currentGroup)
+                    {
+                        SourceFile = rutaArchivo
+                    };
                     if (children != null && children.Count > 0)
                     {
                         descriptor.Children = children;
                     }
-                    
-                    results.Add(descriptor);
+
+                    // NUEVO: jerarquía por indentación
+                    if (stack.Count == 0)
+                    {
+                        results.Add(descriptor);
+                        stack.Push((indent, descriptor));
+                    }
+                    else
+                    {
+                        var (prevIndent, parent) = stack.Peek();
+
+                        if (indent > prevIndent)
+                        {
+                            parent.Children.Add(descriptor);
+                            stack.Push((indent, descriptor));
+                        }
+                        else
+                        {
+                            while (stack.Count > 0 && stack.Peek().indent >= indent)
+                                stack.Pop();
+
+                            if (stack.Count > 0)
+                            {
+                                stack.Peek().desc.Children.Add(descriptor);
+                            }
+                            else
+                            {
+                                results.Add(descriptor);
+                            }
+
+                            stack.Push((indent, descriptor));
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"⚠ Error parsing line {lineno} en {Path.GetFileName(rutaArchivo)}: {ex.Message}");
                 }
             }
-            
+
             return results;
         }
-        
+
+
         /// <summary>
         /// Resuelve una ruta de archivo (absoluta o relativa)
         /// </summary>
@@ -345,7 +367,9 @@ namespace DynamicUI.Parsing
         public List<PropertyEntry> Properties { get; }
         public string GroupName { get; }
         public List<ControlDescriptor> Children { get; set; }
-        
+        // NUEVO: archivo de origen
+        public string SourceFile { get; set; }
+
         public ControlDescriptor(string typeName, List<PropertyEntry> properties, string groupName = null)
         {
             TypeName = typeName;

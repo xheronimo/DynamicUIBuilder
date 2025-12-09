@@ -67,6 +67,55 @@ namespace DynamicUI.Parsing
                         continue;
                     }
 
+                    // Definición de componente
+                    if (linea.StartsWith("Component", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parts = linea.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length < 2)
+                            throw new Exception("Component requiere un nombre");
+
+                        var compName = parts[1];
+
+                        // Creamos un descriptor raíz ficticio para agrupar los hijos
+                        var descriptor1 = new ControlDescriptor("ComponentRoot", new List<PropertyEntry>(), currentGroup)
+                        {
+                            SourceFile = rutaArchivo
+                        };
+
+                        // Lo añadimos a results para que se procese jerárquicamente
+                        results.Add(descriptor1);
+                        stack.Push((indent, descriptor1));
+
+                        // Guardamos en el registro
+                        ComponentRegistry.Register(compName, descriptor1);
+
+                        continue;
+                    }
+
+                    if (linea.StartsWith("UseComponent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parts = linea.Split('=', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length < 2)
+                            throw new Exception("UseComponent requiere un nombre");
+
+                        var compName = parts[1].Trim();
+                        var reused = ComponentRegistry.Resolve(compName);
+
+                        // Insertar en jerarquía actual
+                        if (stack.Count > 0)
+                        {
+                            stack.Peek().desc.Children.Add(reused);
+                        }
+                        else
+                        {
+                            results.Add(reused);
+                        }
+
+                        Console.WriteLine($"✓ Componente '{compName}' reutilizado en {Path.GetFileName(rutaArchivo)}");
+                        continue;
+                    }
+
+
                     // Defaults dentro de Control=
                     if (currentControlType != null && linea.Contains("=") && !linea.Contains(";"))
                     {
@@ -385,4 +434,37 @@ namespace DynamicUI.Parsing
             return $"{TypeName}: {propsStr}{childrenStr}";
         }
     }
+    public static class ComponentRegistry
+    {
+        private static readonly Dictionary<string, ControlDescriptor> _components = new(StringComparer.OrdinalIgnoreCase);
+
+        public static void Register(string name, ControlDescriptor descriptor)
+        {
+            _components[name] = descriptor;
+            Console.WriteLine($"✓ Componente '{name}' registrado desde {descriptor.SourceFile}");
+        }
+
+        public static ControlDescriptor Resolve(string name)
+        {
+            if (_components.TryGetValue(name, out var desc))
+                return CloneDescriptor(desc);
+            throw new Exception($"Componente '{name}' no encontrado");
+        }
+
+        private static ControlDescriptor CloneDescriptor(ControlDescriptor original)
+        {
+            var clone = new ControlDescriptor(original.TypeName,
+                new List<PropertyEntry>(original.Properties),
+                original.GroupName)
+            {
+                SourceFile = original.SourceFile
+            };
+
+            foreach (var child in original.Children)
+                clone.Children.Add(CloneDescriptor(child));
+
+            return clone;
+        }
+    }
+
 }
